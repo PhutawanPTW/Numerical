@@ -1,50 +1,42 @@
-import os
 import tkinter as tk
 from tkinter import ttk
-from tkinter import messagebox
+from datetime import datetime
 import pandas_datareader as pdr
-import pandas as pd
-import matplotlib.pyplot as plt
+import os
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from pandas_datareader.iex import IEXCloudReader
 
 
-def plot_and_predict(api_key, symbol, start_date, end_date):
-    # เรียกดูข้อมูลจาก Alpha Vantage
-    df = pdr.av.time_series.AVTimeSeriesReader(
-        symbols=symbol,
+# Function to fetch data and plot graph
+def fetch_data_and_plot(start_date, end_date):
+    os.environ["ALPHAVANTAGE_API_KEY"] = "BWVT8RGC9APLEI90"
+    df = IEXCloudReader(symbols="AAPL",
         start=start_date,
         end=end_date,
-        api_key=api_key,
-    ).read()
+        api_key=os.getenv("IEX_CLOUD_API_KEY")).read()
 
-    # แปลง index เป็นประเภท datetime
-    df.index = pd.to_datetime(df.index)
 
-    # รวมข้อมูลราคารายเดือน
-    df_monthly = df.resample('M').mean()
-
-    # ประมวลผลข้อมูล
-    df_monthly["Diff"] = df_monthly["close"].diff()
-    df_monthly["SMA_2"] = df_monthly["close"].rolling(2).mean()
-    df_monthly["Force_Index"] = df_monthly["close"] * df_monthly["volume"]
-    df_monthly["y"] = df_monthly["Diff"].apply(lambda x: 1 if x > 0 else 0).shift(-1)
-
-    # ลบคอลัมน์ที่ไม่เกี่ยวข้อง
-    df_monthly = df_monthly.drop(
+    # Processing data
+    df["Diff"] = df["close"].diff()
+    df["SMA_2"] = df["close"].rolling(2).mean()
+    df["Force_Index"] = df["close"] * df["volume"]
+    df["y"] = df["Diff"].apply(lambda x: 1 if x > 0 else 0).shift(-1)
+    df = df.drop(
         ["Diff", "adjusted close"],
         axis=1,
-        errors='ignore'  # ใช้ errors='ignore' เพื่อทำให้ไม่เกิด KeyError หากมีคอลัมน์ที่ไม่มีอยู่
+        errors='ignore'
     ).dropna()
 
-    # แบ่งข้อมูลเป็นคุณลักษณะและตัวแปรเป้าหมาย
-    X = df_monthly.drop(["y"], axis=1).values
-    y = df_monthly["y"].values
-
-    # แบ่งข้อมูลเป็นชุดการฝึกและทดสอบ
+    # Splitting data
+    X = df.drop(["y"], axis=1).values
+    y = df["y"].values
     X_train, X_test, y_train, y_test = train_test_split(
         X,
         y,
@@ -52,95 +44,75 @@ def plot_and_predict(api_key, symbol, start_date, end_date):
         shuffle=False,
     )
 
-    # สร้างและฝึกตัวแยกประเภท
+    # Training classifier
     clf = make_pipeline(StandardScaler(), MLPClassifier(random_state=0, shuffle=False))
     clf.fit(X_train, y_train)
 
-    # ทำการพยากรณ์
+    # Prediction
     y_pred = clf.predict(X_test)
 
-    # คำนวณค่าความแม่นยำ
+    # Accuracy score
     accuracy = accuracy_score(y_test, y_pred)
 
-    # สร้างกราฟราคาเปิดและปิด
-    plt.figure(figsize=(12, 6))
-    plt.plot(df_monthly.index, df_monthly["open"], label="Open Price", color="blue")
-    plt.plot(df_monthly.index, df_monthly["close"], label="Close Price", color="orange")
+    # Plotting graph
+    df.index = pd.to_datetime(df.index)
+    fig, ax = plt.subplots(figsize=(12,6))
+    ax.plot(df.index, df['open'], label='Open Price', color='blue')
+    ax.plot(df.index, df['close'], label='Close Price', color='orange')
+    ax.set_title('AAPL Open and Close Prices')
+    ax.set_xlabel('Date')
+    ax.set_ylabel('Price')
+    ax.legend()
+    ax.grid(True)
 
-    # เพิ่มลูกศรขึ้นลง
-    last_year = X_test[-1, 0]  # ปีสุดท้ายใน X_test
-    last_month = X_test[-1, 1]  # เดือนสุดท้ายใน X_test
+    # Arrow annotation
+    if y_pred[-1] > 0.5:
+        ax.annotate("↓",
+                     (df.index[-1], (df["open"][-1] + df["close"][-1]) / 2),
+                     textcoords="offset points",
+                     xytext=(0,0),
+                     ha='center',
+                     fontsize=12,
+                     color='red')
+    else:
+        ax.annotate("↑",
+                     (df.index[-1], (df["open"][-1] + df["close"][-1]) / 2),
+                     textcoords="offset points",
+                     xytext=(0,0),
+                     ha='center',
+                     fontsize=12,
+                     color='green')
 
-    plt.annotate("↑", (df_monthly.index[-1], (df_monthly["open"][-1] + df_monthly["close"][-1]) / 2),
-                 textcoords="offset points", xytext=(0, 0), ha='center', fontsize=12, color='green') if y_pred[
-                                                                                                             -1] > 0.5 else plt.annotate(
-        "↓", (df_monthly.index[-1], (df_monthly["open"][-1] + df_monthly["close"][-1]) / 2), textcoords="offset points",
-        xytext=(0, 0), ha='center', fontsize=12, color='red')
+    accuracy_text = "Accuracy: {:.{}f}".format(accuracy, 12)
+    ax.text(0.15, 0.05, accuracy_text, transform=ax.transAxes, fontsize=12, color='purple', fontweight='bold')
 
-    plt.title("AAPL Open and Close Prices (Monthly)")
-    plt.xlabel("Date")
-    plt.ylabel("Price")
-    plt.legend()
-    plt.grid(True)
-    plt.show()
+    canvas = FigureCanvasTkAgg(fig, master=root)
+    canvas.draw()
+    canvas.get_tk_widget().grid(row=3, column=0, columnspan=2, padx=10, pady=10)
 
-    return accuracy
+# Function to handle button click
+def handle_button_click():
+    start_date = start_entry.get()
+    end_date = end_entry.get()
+    fetch_data_and_plot(start_date, end_date)
 
-
-def on_send_click():
-    api_key = api_key_entry.get()
-    symbol = symbol_entry.get()
-    start_date = start_date_entry.get()
-    end_date = end_date_entry.get()
-
-    if not api_key or not symbol or not start_date or not end_date:
-        messagebox.showerror("Error", "Please fill in all fields.")
-        return
-
-    accuracy = plot_and_predict(api_key, symbol, start_date, end_date)
-    accuracy_label.config(text=f"Accuracy: {accuracy}")
-
-
-# สร้าง GUI
+# Creating GUI
 root = tk.Tk()
 root.title("Stock Price Prediction")
 
-# สร้างแท็บ
-tab_control = ttk.Notebook(root)
-tab1 = ttk.Frame(tab_control)
-tab_control.add(tab1, text="Stock Price Prediction")
-tab_control.pack(expand=1, fill="both")
+# Labels and Entries
+start_label = ttk.Label(root, text="Start Date (YYYY-MM-DD):")
+start_label.grid(row=0, column=0, padx=5, pady=5)
+start_entry = ttk.Entry(root)
+start_entry.grid(row=0, column=1, padx=5, pady=5)
 
-# เพิ่มอินพุท API key
-api_key_label = ttk.Label(tab1, text="API Key:")
-api_key_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
-api_key_entry = ttk.Entry(tab1)
-api_key_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+end_label = ttk.Label(root, text="End Date (YYYY-MM-DD):")
+end_label.grid(row=1, column=0, padx=5, pady=5)
+end_entry = ttk.Entry(root)
+end_entry.grid(row=1, column=1, padx=5, pady=5)
 
-# เพิ่มอินพุท Symbol
-symbol_label = ttk.Label(tab1, text="Symbol:")
-symbol_label.grid(row=1, column=0, padx=5, pady=5, sticky="w")
-symbol_entry = ttk.Entry(tab1)
-symbol_entry.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
-
-# เพิ่มอินพุท Start Date
-start_date_label = ttk.Label(tab1, text="Start Date (YYYY-MM-DD):")
-start_date_label.grid(row=2, column=0, padx=5, pady=5, sticky="w")
-start_date_entry = ttk.Entry(tab1)
-start_date_entry.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
-
-# เพิ่มอินพุท End Date
-end_date_label = ttk.Label(tab1, text="End Date (YYYY-MM-DD):")
-end_date_label.grid(row=3, column=0, padx=5, pady=5, sticky="w")
-end_date_entry = ttk.Entry(tab1)
-end_date_entry.grid(row=3, column=1, padx=5, pady=5, sticky="ew")
-
-# ปุ่มส่งข้อมูล
-send_button = ttk.Button(tab1, text="Send", command=on_send_click)
-send_button.grid(row=4, column=0, columnspan=2, padx=5, pady=5)
-
-# สร้างป้ายแสดงความแม่นยำ
-accuracy_label = ttk.Label(tab1, text="")
-accuracy_label.grid(row=5, column=0, columnspan=2, padx=5, pady=5)
+# Button
+fetch_button = ttk.Button(root, text="Fetch Data and Plot", command=handle_button_click)
+fetch_button.grid(row=2, column=0, columnspan=2, padx=5, pady=5)
 
 root.mainloop()
