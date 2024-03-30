@@ -1,0 +1,1 @@
+print("Matrix A ไม่ใช่ Matrix จตุรัส")
