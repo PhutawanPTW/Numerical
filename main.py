@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from pandas_datareader.iex import IEXCloudReader
 
-
+ 
 # Function to fetch data and plot graph
 def fetch_data_and_plot(start_date, end_date):
     os.environ["ALPHAVANTAGE_API_KEY"] = "BWVT8RGC9APLEI90"
