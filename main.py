@@ -72,28 +72,25 @@ def fetch_data_and_plot():
     ax.legend()
     ax.grid(True)
 
-
-    if y_pred[-1] < 0.5:
+    if accuracy < 0.5:
         plt.annotate("↓",
-                 (df.index[-1], (df["open"][-1] + df["close"][-1]) / 2),
-                 textcoords="offset points",
-                 xytext=(0,0),
-                 ha='center',
-                 fontsize=12,
-                 color='red')
-    else:
+                     (df.index[-1], (df["open"][-1] + df["close"][-1]) / 2),
+                     textcoords="offset points",
+                     xytext=(0,0),
+                     ha='center',
+                     fontsize=12,
+                     color='red')
+    elif accuracy > 0.5:
         plt.annotate("↑",
-                 (df.index[-1], (df["open"][-1] + df["close"][-1]) / 2),
-                 textcoords="offset points",
-                 xytext=(0,0),
-                 ha='center',
-                 fontsize=12,
-                 color='green')
-
+                     (df.index[-1], (df["open"][-1] + df["close"][-1]) / 2),
+                     textcoords="offset points",
+                     xytext=(0,0),
+                     ha='center',
+                     fontsize=12,
+                     color='green')
 
     accuracy_text = "Accuracy: " + str(accuracy)
     ax.text(0.15, 0.05, accuracy_text, transform=ax.transAxes, fontsize=12, color='purple', fontweight='bold')
-
 
     canvas = FigureCanvasTkAgg(fig, master=root)
     canvas.draw()
